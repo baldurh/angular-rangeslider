@@ -59,9 +59,9 @@
                 preventEqualMinMax: false
             },
 
-            onEvent = (EVENT === 1 ? 'pointerdown' : (EVENT === 2 ? 'MSPointerDown' : (EVENT === 3 ? 'touchstart' : 'mousedown'))) + eventNamespace,
-            moveEvent = (EVENT === 1 ? 'pointermove' : (EVENT === 2 ? 'MSPointerMove' : (EVENT === 3 ? 'touchmove' : 'mousemove'))) + eventNamespace,
-            offEvent = (EVENT === 1 ? 'pointerup' : (EVENT === 2 ? 'MSPointerUp' : (EVENT === 3 ? 'touchend' : 'mouseup'))) + eventNamespace,
+            onEvent = (EVENT === 1 ? 'pointerdown' : (EVENT === 2 ? 'MSPointerDown' : (EVENT === 3 ? 'touchstart' : 'mousedown'))),
+            moveEvent = (EVENT === 1 ? 'pointermove' : (EVENT === 2 ? 'MSPointerMove' : (EVENT === 3 ? 'touchmove' : 'mousemove'))),
+            offEvent = (EVENT === 1 ? 'pointerup' : (EVENT === 2 ? 'MSPointerUp' : (EVENT === 3 ? 'touchend' : 'mouseup'))),
 
             // get standarised clientX and clientY
             client = function (f) {
@@ -86,9 +86,9 @@
 
         if (EVENT < 4) {
             // some sort of touch has been detected
-            angular.element('html').addClass('ngrs-touch');
+            $document.find('html').addClass('ngrs-touch');
         } else {
-            angular.element('html').addClass('ngrs-no-touch');
+            $document.find('html').addClass('ngrs-no-touch');
         }
 
 
@@ -97,9 +97,9 @@
             replace: true,
             template: ['<div class="ngrs-range-slider">',
                          '<div class="ngrs-runner">',
-                           '<div class="ngrs-handle ngrs-handle-min"><i></i></div>',
-                           '<div class="ngrs-handle ngrs-handle-max"><i></i></div>',
-                           '<div class="ngrs-join"></div>',
+                           '<handle class="ngrs-handle ngrs-handle-min" ng-mousedown="downHandler($event)" index="0"><i></i></handle>',
+                           '<handle class="ngrs-handle ngrs-handle-max" ng-mousedown="downHandler($event)" index="1"><i></i></handle>',
+                           '<join class="ngrs-join"></join>',
                          '</div>',
                          '<div class="ngrs-value ngrs-value-min" ng-show="showValues">{{filteredModelMin}}</div>',
                          '<div class="ngrs-value ngrs-value-max" ng-show="showValues">{{filteredModelMax}}</div>',
@@ -126,22 +126,22 @@
                  */
 
                 var $slider = angular.element(element),
-                    handles = [element.find('.ngrs-handle-min'), element.find('.ngrs-handle-max')],
+                    handles = element.find('handle'),
                     handle1pos = 0,
                     handle2pos = 0,
-                    join = element.find('.ngrs-join'),
+                    join = element.find('join'),
                     pos = 'left',
                     posOpp = 'right',
                     orientation = 0,
                     allowedRange = [0, 0],
                     range = 0,
                     scheduledFrame = false,
-                    body = angular.element('body');
+                    body = $document.find('body'),
+                    downHandle = null;
 
                 // filtered
                 scope.filteredModelMin = scope.modelMin;
                 scope.filteredModelMax = scope.modelMax;
-
                 /**
                  *  FALL BACK TO DEFAULTS FOR SOME ATTRIBUTES
                  */
@@ -241,17 +241,17 @@
                 /**
                  * HANDLE CHANGES
                  */
-
+                
                 function setPinHandle (status) {
                     if (status === "min") {
-                        handles[0].css('display', 'none');
-                        handles[1].css('display', 'block');
+                        handles.eq(0).css('display', 'none');
+                        handles.eq(1).css('display', 'block');
                     } else if (status === "max") {
-                        handles[0].css('display', 'block');
-                        handles[1].css('display', 'none');
+                        handles.eq(0).css('display', 'block');
+                        handles.eq(1).css('display', 'none');
                     } else {
-                        handles[0].css('display', 'block');
-                        handles[1].css('display', 'block');
+                        handles.eq(0).css('display', 'block');
+                        handles.eq(1).css('display', 'block');
                     }
                 }
 
@@ -353,8 +353,8 @@
                     if (scope.min === scope.max && scope.modelMin === scope.modelMax) {
 
                         // reposition handles
-                        handles[0].css(pos, '0%');
-                        handles[1].css(pos, '100%');
+                        handles.eq(0).css(pos, '0%');
+                        handles.eq(1).css(pos, '100%');
 
                         // reposition join
                         join.css(pos, '0%').css(posOpp, '0%');
@@ -362,153 +362,159 @@
                     } else {
 
                         // reposition handles
-                        handles[0].css(pos, handle1pos + '%');
-                        handles[1].css(pos, handle2pos + '%');
+                        handles.eq(0).css(pos, handle1pos + '%');
+                        handles.eq(1).css(pos, handle2pos + '%');
 
                         // reposition join
                         join.css(pos, handle1pos + '%').css(posOpp, (100 - handle2pos) + '%');
 
                         // ensure min handle can't be hidden behind max handle
                         if (handle1pos >  95) {
-                            handles[0].css('z-index', 3);
+                            handles.eq(0).css('z-index', 3);
                         }
                     }
 
                     scheduledFrame = false;
                 }
 
-                function handleMove(index) {
 
-                    var $handle = handles[index];
+                scope.downHandler = function(event) {
+                    
+                    downHandle = angular.element(event.currentTarget);
+                    var index = parseInt(downHandle.attr('index')),
+                        isMin = index === 0;
 
-                    // on mousedown / touchstart
-                    $handle.bind(onEvent + 'X', function (event) {
+                    var handleDownClass = (isMin ? 'ngrs-handle-min' : 'ngrs-handle-max') + '-down',
+                        //unbind = $handle.add($document).add('body'),
+                        modelValue = (isMin ? scope.modelMin : scope.modelMax) - scope.min,
+                        originalPosition = (modelValue / range) * 100,
+                        originalClick = client(event),
+                        previousClick = originalClick,
+                        previousProposal = false;
 
-                        var handleDownClass = (index === 0 ? 'ngrs-handle-min' : 'ngrs-handle-max') + '-down',
-                            unbind = $handle.add($document).add('body'),
-                            modelValue = (index === 0 ? scope.modelMin : scope.modelMax) - scope.min,
-                            originalPosition = (modelValue / range) * 100,
-                            originalClick = client(event),
-                            previousClick = originalClick,
-                            previousProposal = false;
+                    // only do stuff if we are not disabled
+                    if (!scope.disabled) {
 
+                        // add down class
+                        downHandle.addClass('ngrs-down');
+
+                        $slider.addClass('ngrs-focus ' + handleDownClass);
+
+                        // add touch class for MS styling
+                        body.addClass('ngrs-touching');
+
+                        $document
+                        .bind(moveEvent, moveHandler.bind({
+                            index: index,
+                            isMin: isMin,
+                            originalClick: originalClick,
+                            previousClick: previousClick,
+                            originalPosition: originalPosition,
+                            handle: downHandle,
+                            previousProposal: previousProposal
+                        }))
+                        .bind(offEvent, upHandler.bind({
+                            handle: downHandle,
+                            handleDownClass: handleDownClass
+                        }))
                         // stop user accidentally selecting stuff
-                        body.bind('selectstart' + eventNamespace, function () {
-                            return false;
-                        });
+                        .bind('selectstart' + eventNamespace, false);
+                    }
+                }
+                function upHandler(e) {
+                    $document.unbind(moveEvent).unbind(offEvent).unbind('selectstart');
 
-                        // only do stuff if we are disabled
-                        if (!scope.disabled) {
+                    body.removeClass('ngrs-touching');
 
-                            // add down class
-                            $handle.addClass('ngrs-down');
+                    // remove down class
+                    this.handle.removeClass('ngrs-down');
 
-                            $slider.addClass('ngrs-focus ' + handleDownClass);
+                    // remove active class
+                    $slider.removeClass('ngrs-focus ' + this.handleDownClass);
+                }
+                function moveHandler (e) {
+                    // prevent default
+                    e.preventDefault();
 
-                            // add touch class for MS styling
-                            body.addClass('ngrs-touching');
+                    var currentClick = client(e),
+                        movement,
+                        proposal,
+                        other,
+                        per = (scope.step / range) * 100,
+                        otherModelPosition = (((this.isMin ? scope.modelMax : scope.modelMin) - scope.min) / range) * 100;
 
-                            // listen for mousemove / touchmove document events
-                            $document.bind(moveEvent, function (e) {
-                                // prevent default
-                                e.preventDefault();
+                    if (currentClick[0] === "x") {
+                        return;
+                    }
 
-                                var currentClick = client(e),
-                                    movement,
-                                    proposal,
-                                    other,
-                                    per = (scope.step / range) * 100,
-                                    otherModelPosition = (((index === 0 ? scope.modelMax : scope.modelMin) - scope.min) / range) * 100;
+                    // calculate deltas
+                    currentClick[0] -= this.originalClick[0];
+                    currentClick[1] -= this.originalClick[1];
 
-                                if (currentClick[0] === "x") {
-                                    return;
-                                }
+                    // has movement occurred on either axis?
+                    movement = [
+                        (this.previousClick[0] !== currentClick[0]), (this.previousClick[1] !== currentClick[1])
+                    ];
 
-                                // calculate deltas
-                                currentClick[0] -= originalClick[0];
-                                currentClick[1] -= originalClick[1];
+                    // propose a movement
+                    proposal = this.originalPosition + ((currentClick[orientation] * 100) / (orientation ? element[0].offsetHeight : element[0].offsetWidth));
 
-                                // has movement occurred on either axis?
-                                movement = [
-                                    (previousClick[0] !== currentClick[0]), (previousClick[1] !== currentClick[1])
-                                ];
+                    // normalize so it can't move out of bounds
+                    proposal = restrict(proposal);
 
-                                // propose a movement
-                                proposal = originalPosition + ((currentClick[orientation] * 100) / (orientation ? $slider.height() : $slider.width()));
+                    if (scope.preventEqualMinMax) {
 
-                                // normalize so it can't move out of bounds
-                                proposal = restrict(proposal);
-
-                                if (scope.preventEqualMinMax) {
-
-                                    if (per === 0) {
-                                        per = (1 / range) * 100; // restrict to 1
-                                    }
-
-                                    if (index === 0) {
-                                        otherModelPosition = otherModelPosition - per;
-                                    } else if (index === 1) {
-                                        otherModelPosition = otherModelPosition + per;
-                                    }
-                                }
-
-                                // check which handle is being moved and add / remove margin
-                                if (index === 0) {
-                                    proposal = proposal > otherModelPosition ? otherModelPosition : proposal;
-                                } else if (index === 1) {
-                                    proposal = proposal < otherModelPosition ? otherModelPosition : proposal;
-                                }
-
-                                if (scope.step > 0) {
-                                    // only change if we are within the extremes, otherwise we get strange rounding
-                                    if (proposal < 100 && proposal > 0) {
-                                        proposal = Math.round(proposal / per) * per;
-                                    }
-                                }
-
-                                if (proposal > 95 && index === 0) {
-                                    $handle.css('z-index', 3);
-                                } else {
-                                    $handle.css('z-index', '');
-                                }
-
-                                if (movement[orientation] && proposal != previousProposal) {
-
-                                    if (index === 0) {
-
-                                        // update model as we slide
-                                        scope.modelMin = parseFloat((((proposal * range) / 100) + scope.min)).toFixed(scope.decimalPlaces);
-
-                                    } else if (index === 1) {
-
-                                        scope.modelMax = parseFloat((((proposal * range) / 100) + scope.min)).toFixed(scope.decimalPlaces);
-                                    }
-
-                                    // update angular
-                                    scope.$apply();
-
-                                    previousProposal = proposal;
-
-                                }
-
-                                previousClick = currentClick;
-
-                            }).bind(offEvent, function () {
-
-                                unbind.off(eventNamespace);
-
-                                body.removeClass('ngrs-touching');
-
-                                // remove down class
-                                $handle.removeClass('ngrs-down');
-
-                                // remove active class
-                                $slider.removeClass('ngrs-focus ' + handleDownClass);
-
-                            });
+                        if (per === 0) {
+                            per = (1 / range) * 100; // restrict to 1
                         }
 
-                    });
+                        if (this.isMin) {
+                            otherModelPosition = otherModelPosition - per;
+                        } else {
+                            otherModelPosition = otherModelPosition + per;
+                        }
+                    }
+
+                    // check which handle is being moved and add / remove margin
+                    if (this.isMin) {
+                        proposal = proposal > otherModelPosition ? otherModelPosition : proposal;
+                    } else {
+                        proposal = proposal < otherModelPosition ? otherModelPosition : proposal;
+                    }
+
+                    if (scope.step > 0) {
+                        // only change if we are within the extremes, otherwise we get strange rounding
+                        if (proposal < 100 && proposal > 0) {
+                            proposal = Math.round(proposal / per) * per;
+                        }
+                    }
+
+                    // if (proposal > 95 && this.isMin) {
+                    //     this.handle.css('z-index', 3);
+                    // } else {
+                    //     this.handle.css('z-index', '');
+                    // }
+
+                    if (movement[orientation] && proposal !== this.previousProposal) {
+
+                        if (this.isMin) {
+
+                            // update model as we slide
+                            scope.modelMin = parseFloat((((proposal * range) / 100) + scope.min)).toFixed(scope.decimalPlaces);
+
+                        } else {
+
+                            scope.modelMax = parseFloat((((proposal * range) / 100) + scope.min)).toFixed(scope.decimalPlaces);
+                        }
+
+                        // update angular
+                        scope.$apply();
+
+                        this.previousProposal = proposal;
+
+                    }
+
+                    this.previousClick = currentClick;
                 }
 
                 function throwError (message) {
@@ -558,8 +564,8 @@
                     });
 
                 // bind events to each handle
-                handleMove(0);
-                handleMove(1);
+                // handleMove(0);
+                // handleMove(1);
 
             }
         };

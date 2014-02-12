@@ -99,6 +99,7 @@
   -webkit-user-select: none;
   -moz-user-select: none;
   user-select: none;
+  -webkit-transform: translateZ(0);
 }
 /* line 97, scss/angular.rangeSlider.scss */
 .ngrs-range-slider .ngrs-runner {
@@ -154,7 +155,7 @@
 }
 /* line 148, scss/angular.rangeSlider.scss */
 .ngrs-no-touch .ngrs-range-slider .ngrs-handle:hover i, .ngrs-range-slider .ngrs-handle.ngrs-down i {
-  background-position: 50% 50%;
+  /*background-position: 50% 50%;*/
 }
 /* line 153, scss/angular.rangeSlider.scss */
 .ngrs-range-slider .ngrs-handle.ngrs-down {
