@@ -72,10 +72,10 @@
                 }
             },
 
-            restrict = function (value) {
+            restrict = function (value, min, max) {
 
                 // normalize so it can't move out of bounds
-                return (value < 0 ? 0 : (value > 100 ? 100 : value));
+                return Math.max(min, Math.min(value, max)); //(value < 0 ? 0 : (value > runnerWidth ? 100 : value))
 
             },
 
@@ -96,11 +96,11 @@
             restrict: 'A',
             replace: true,
             template: ['<div class="ngrs-range-slider">',
-                         '<div class="ngrs-runner">',
+                         '<runner class="ngrs-runner">',
                            '<handle class="ngrs-handle ngrs-handle-min" ng-mousedown="downHandler($event)" index="0"><i></i></handle>',
                            '<handle class="ngrs-handle ngrs-handle-max" ng-mousedown="downHandler($event)" index="1"><i></i></handle>',
                            '<join class="ngrs-join"></join>',
-                         '</div>',
+                         '</runner>',
                          '<div class="ngrs-value ngrs-value-min" ng-show="showValues">{{filteredModelMin}}</div>',
                          '<div class="ngrs-value ngrs-value-max" ng-show="showValues">{{filteredModelMax}}</div>',
                        '</div>'].join(''),
@@ -127,6 +127,7 @@
 
                 var $slider = angular.element(element),
                     handles = element.find('handle'),
+                    runner = element.find('runner'),
                     handle1pos = 0,
                     handle2pos = 0,
                     join = element.find('join'),
@@ -134,14 +135,17 @@
                     posOpp = 'right',
                     orientation = 0,
                     allowedRange = [0, 0],
-                    range = 0,
+                    range = scope.max - scope.min,
                     scheduledFrame = false,
                     body = $document.find('body'),
                     downHandle = null;
 
+                var runnerWidth = runner[0].offsetWidth;
                 // filtered
                 scope.filteredModelMin = scope.modelMin;
                 scope.filteredModelMax = scope.modelMax;
+                scope.handle1pos = restrict(((scope.modelMin - scope.min) / range) * runnerWidth, 0, runnerWidth);
+                scope.handle2pos = restrict(((scope.modelMax - scope.min) / range) * runnerWidth, 0, runnerWidth);
                 /**
                  *  FALL BACK TO DEFAULTS FOR SOME ATTRIBUTES
                  */
@@ -229,14 +233,53 @@
                     }
                 });
 
+                if (scope.min > scope.max) {
+                    throwError('min must be less than or equal to max');
+                }
 
+                if (scope.modelMin > scope.modelMax) {
+                    throwWarning('modelMin must be less than or equal to modelMax');
+                    // reset values to correct
+                    scope.modelMin = scope.modelMax;
+                }
 
-                // listen for changes to values
-                scope.$watch('min', setMinMax);
-                scope.$watch('max', setMinMax);
+                // only do stuff when all values are ready
+                if ( angular.isDefined(scope.min) &&
+                     angular.isDefined(scope.max) &&
+                    (angular.isDefined(scope.modelMin) || scope.pinHandle === 'min') && 
+                    (angular.isDefined(scope.modelMax) || scope.pinHandle === 'max')
+                ) {
+                    // make sure they are numbers
+                    if (!isNumber(scope.min)) {
+                        throwError('min must be a number');
+                    }
 
-                scope.$watch('modelMin', setModelMinMax);
-                scope.$watch('modelMax', setModelMinMax);
+                    if (!isNumber(scope.max)) {
+                        throwError('max must be a number');
+                    }
+
+                    // make sure they are numbers
+                    if (!isNumber(scope.modelMin)) {
+                        if (scope.pinHandle !== 'min') {
+                            throwWarning('modelMin must be a number');
+                        }
+                        scope.modelMin = scope.min;
+                    }
+
+                    if (!isNumber(scope.modelMax)) {
+                        if (scope.pinHandle !== 'max') {
+                            throwWarning('modelMax must be a number');
+                        }
+                        scope.modelMax = scope.max;
+                    }
+
+                    range = scope.max - scope.min;
+                    allowedRange = [scope.min, scope.max];
+
+                    // listen for changes to values
+                    scope.$watch('handle1pos', setModelMinMax);
+                    scope.$watch('handle2pos', setModelMinMax);
+                }
 
                 /**
                  * HANDLE CHANGES
@@ -263,35 +306,7 @@
                     }
                 }
 
-                function setMinMax () {
-
-                    if (scope.min > scope.max) {
-                        throwError('min must be less than or equal to max');
-                    }
-
-                    // only do stuff when both values are ready
-                    if (angular.isDefined(scope.min) && angular.isDefined(scope.max)) {
-
-                        // make sure they are numbers
-                        if (!isNumber(scope.min)) {
-                            throwError('min must be a number');
-                        }
-
-                        if (!isNumber(scope.max)) {
-                            throwError('max must be a number');
-                        }
-
-                        range = scope.max - scope.min;
-                        allowedRange = [scope.min, scope.max];
-
-                        // update models too
-                        setModelMinMax();
-
-                    }
-                }
-
                 function setModelMinMax () {
-
 
                     // skip the calculations if there is a frame scheduled to be drawn
                     if (scheduledFrame) {
@@ -299,51 +314,26 @@
                     }
 
                     scheduledFrame = true;
+
+
+
+                    scope.modelMin = parseFloat(scope.handle1pos / runnerWidth * range).toFixed(scope.decimalPlaces);
+                    scope.modelMax = parseFloat(scope.handle2pos / runnerWidth * range).toFixed(scope.decimalPlaces);
+
+                    // make sure the model values are within the allowed range
+                    scope.modelMin = Math.max(scope.min, scope.modelMin);
+                    scope.modelMax = Math.min(scope.max, scope.modelMax);
+
+                    if (scope.filter) {
+                        scope.filteredModelMin = $filter(scope.filter)(scope.modelMin, scope.filterOptions);
+                        scope.filteredModelMax = $filter(scope.filter)(scope.modelMax, scope.filterOptions);
+                    } else {
+                        scope.filteredModelMin = scope.modelMin;
+                        scope.filteredModelMax = scope.modelMax;
+                    }
+
+                    requestAnimFrame(updateUI);
                     
-                    if (scope.modelMin > scope.modelMax) {
-                        throwWarning('modelMin must be less than or equal to modelMax');
-                        // reset values to correct
-                        scope.modelMin = scope.modelMax;
-                    }
-
-                    // only do stuff when both values are ready
-                    if (
-                        (angular.isDefined(scope.modelMin) || scope.pinHandle === 'min') && 
-                        (angular.isDefined(scope.modelMax) || scope.pinHandle === 'max')
-                    ) {
-
-                        // make sure they are numbers
-                        if (!isNumber(scope.modelMin)) {
-                            if (scope.pinHandle !== 'min') {
-                                throwWarning('modelMin must be a number');
-                            }
-                            scope.modelMin = scope.min;
-                        }
-
-                        if (!isNumber(scope.modelMax)) {
-                            if (scope.pinHandle !== 'max') {
-                                throwWarning('modelMax must be a number');
-                            }
-                            scope.modelMax = scope.max;
-                        }
-
-                        handle1pos = restrict(((scope.modelMin - scope.min) / range) * 100);
-                        handle2pos = restrict(((scope.modelMax - scope.min) / range) * 100);
-
-                        // make sure the model values are within the allowed range
-                        scope.modelMin = Math.max(scope.min, scope.modelMin);
-                        scope.modelMax = Math.min(scope.max, scope.modelMax);
-
-                        if (scope.filter) {
-                            scope.filteredModelMin = $filter(scope.filter)(scope.modelMin, scope.filterOptions);
-                            scope.filteredModelMax = $filter(scope.filter)(scope.modelMax, scope.filterOptions);
-                        } else {
-                            scope.filteredModelMin = scope.modelMin;
-                            scope.filteredModelMax = scope.modelMax;
-                        }
-
-                        requestAnimFrame(updateUI);
-                    }
 
                 }
 
@@ -362,14 +352,14 @@
                     } else {
 
                         // reposition handles
-                        handles.eq(0).css(pos, handle1pos + '%');
-                        handles.eq(1).css(pos, handle2pos + '%');
+                        handles.eq(0).css('-webkit-transform', 'translate3d('+scope.handle1pos+'px,0,0)');
+                        handles.eq(1).css('-webkit-transform', 'translate3d('+scope.handle2pos+'px,0,0)');
 
                         // reposition join
-                        join.css(pos, handle1pos + '%').css(posOpp, (100 - handle2pos) + '%');
-
+                        // join.css(pos, handle1pos + '%').css(posOpp, (100 - handle2pos) + '%');
+                        join.css('-webkit-transform', 'translate3d('+scope.handle1pos+'px,0,0)').css('width', scope.handle2pos-scope.handle1pos+'px');
                         // ensure min handle can't be hidden behind max handle
-                        if (handle1pos >  95) {
+                        if (scope.handle1pos >  95) {
                             handles.eq(0).css('z-index', 3);
                         }
                     }
@@ -385,9 +375,8 @@
                         isMin = index === 0;
 
                     var handleDownClass = (isMin ? 'ngrs-handle-min' : 'ngrs-handle-max') + '-down',
-                        //unbind = $handle.add($document).add('body'),
                         modelValue = (isMin ? scope.modelMin : scope.modelMax) - scope.min,
-                        originalPosition = (modelValue / range) * 100,
+                        originalPosition = (modelValue / range) * runnerWidth,
                         originalClick = client(event),
                         previousClick = originalClick,
                         previousProposal = false;
@@ -403,119 +392,106 @@
                         // add touch class for MS styling
                         body.addClass('ngrs-touching');
 
-                        $document
-                        .bind(moveEvent, moveHandler.bind({
-                            index: index,
-                            isMin: isMin,
-                            originalClick: originalClick,
-                            previousClick: previousClick,
-                            originalPosition: originalPosition,
-                            handle: downHandle,
-                            previousProposal: previousProposal
-                        }))
-                        .bind(offEvent, upHandler.bind({
-                            handle: downHandle,
-                            handleDownClass: handleDownClass
-                        }))
+                        $document[0].addEventListener(moveEvent, moveHandler);
+                        $document[0].addEventListener(offEvent, upHandler);
                         // stop user accidentally selecting stuff
-                        .bind('selectstart' + eventNamespace, false);
-                    }
-                }
-                function upHandler(e) {
-                    $document.unbind(moveEvent).unbind(offEvent).unbind('selectstart');
-
-                    body.removeClass('ngrs-touching');
-
-                    // remove down class
-                    this.handle.removeClass('ngrs-down');
-
-                    // remove active class
-                    $slider.removeClass('ngrs-focus ' + this.handleDownClass);
-                }
-                function moveHandler (e) {
-                    // prevent default
-                    e.preventDefault();
-
-                    var currentClick = client(e),
-                        movement,
-                        proposal,
-                        other,
-                        per = (scope.step / range) * 100,
-                        otherModelPosition = (((this.isMin ? scope.modelMax : scope.modelMin) - scope.min) / range) * 100;
-
-                    if (currentClick[0] === "x") {
-                        return;
+                        $document[0].addEventListener('selectstart', false);
                     }
 
-                    // calculate deltas
-                    currentClick[0] -= this.originalClick[0];
-                    currentClick[1] -= this.originalClick[1];
+                    function upHandler(e) {
+                        $document[0].removeEventListener(moveEvent, moveHandler);
+                        $document[0].removeEventListener(offEvent, upHandler);
+                        $document[0].removeEventListener('selectstart', false);
 
-                    // has movement occurred on either axis?
-                    movement = [
-                        (this.previousClick[0] !== currentClick[0]), (this.previousClick[1] !== currentClick[1])
-                    ];
+                        body.removeClass('ngrs-touching');
 
-                    // propose a movement
-                    proposal = this.originalPosition + ((currentClick[orientation] * 100) / (orientation ? element[0].offsetHeight : element[0].offsetWidth));
+                        // remove down class
+                        downHandle.removeClass('ngrs-down');
 
-                    // normalize so it can't move out of bounds
-                    proposal = restrict(proposal);
+                        // remove active class
+                        $slider.removeClass('ngrs-focus ' + handleDownClass);
+                    }
+                    function moveHandler (e) {
+                        // prevent default
+                        e.preventDefault();
+                        
 
-                    if (scope.preventEqualMinMax) {
+                        var currentClick = client(e),
+                            movement,
+                            proposal,
+                            other,
+                            per = (scope.step / range) * 100,
+                            otherModelPosition = isMin ? scope.handle2pos : scope.handle1pos;
 
-                        if (per === 0) {
-                            per = (1 / range) * 100; // restrict to 1
+                        if (currentClick[0] === "x") {
+                            return;
                         }
 
-                        if (this.isMin) {
-                            otherModelPosition = otherModelPosition - per;
+                        // calculate deltas
+                        currentClick[0] -= originalClick[0];
+                        currentClick[1] -= originalClick[1];
+
+                        // has movement occurred on either axis?
+                        movement = [
+                            (previousClick[0] !== currentClick[0]), (previousClick[1] !== currentClick[1])
+                        ];
+
+                        // propose a movement
+                        proposal = originalPosition + currentClick[orientation];
+
+                        // normalize so it can't move out of bounds
+                        proposal = restrict(proposal, 0, runnerWidth);
+
+                        if (scope.preventEqualMinMax) {
+
+                            if (per === 0) {
+                                per = (1 / range) * 100; // restrict to 1
+                            }
+
+                            if (isMin) {
+                                otherModelPosition = otherModelPosition - per;
+                            } else {
+                                otherModelPosition = otherModelPosition + per;
+                            }
+                        }
+
+                        // check which handle is being moved and add / remove margin
+                        if (isMin) {
+                            proposal = proposal > otherModelPosition ? otherModelPosition : proposal;
                         } else {
-                            otherModelPosition = otherModelPosition + per;
+                            proposal = proposal < otherModelPosition ? otherModelPosition : proposal;
                         }
-                    }
 
-                    // check which handle is being moved and add / remove margin
-                    if (this.isMin) {
-                        proposal = proposal > otherModelPosition ? otherModelPosition : proposal;
-                    } else {
-                        proposal = proposal < otherModelPosition ? otherModelPosition : proposal;
-                    }
-
-                    if (scope.step > 0) {
-                        // only change if we are within the extremes, otherwise we get strange rounding
-                        if (proposal < 100 && proposal > 0) {
-                            proposal = Math.round(proposal / per) * per;
+                        if (scope.step > 0) {
+                            // only change if we are within the extremes, otherwise we get strange rounding
+                            if (proposal < 100 && proposal > 0) {
+                                proposal = Math.round(proposal / per) * per;
+                            }
                         }
-                    }
 
-                    // if (proposal > 95 && this.isMin) {
-                    //     this.handle.css('z-index', 3);
-                    // } else {
-                    //     this.handle.css('z-index', '');
-                    // }
-
-                    if (movement[orientation] && proposal !== this.previousProposal) {
-
-                        if (this.isMin) {
-
-                            // update model as we slide
-                            scope.modelMin = parseFloat((((proposal * range) / 100) + scope.min)).toFixed(scope.decimalPlaces);
-
+                        if (proposal > 95 && isMin) {
+                            downHandle.css('z-index', 3);
                         } else {
-
-                            scope.modelMax = parseFloat((((proposal * range) / 100) + scope.min)).toFixed(scope.decimalPlaces);
+                            downHandle.css('z-index', '');
                         }
 
-                        // update angular
-                        scope.$apply();
+                        if (movement[orientation] && proposal != previousProposal) {
+                            scope.$apply(function () {
+                                if (isMin) {
+                                    // update model as we slide
+                                    scope.handle1pos = proposal;
+                                } else {
+                                    // update model as we slide
+                                    scope.handle2pos = proposal;
+                                } 
+                            });
+                        }
 
-                        this.previousProposal = proposal;
-
+                        previousProposal = proposal;
+                        previousClick = currentClick;
                     }
-
-                    this.previousClick = currentClick;
                 }
+                
 
                 function throwError (message) {
                     scope.disabled = true;
@@ -553,19 +529,12 @@
                  * INIT
                  */
 
-                $slider
-                    // disable selection
-                    .bind('selectstart' + eventNamespace, function (event) {
-                        return false;
-                    })
-                    // stop propagation
-                    .bind('click', function (event) {
-                        event.stopPropagation();
-                    });
-
-                // bind events to each handle
-                // handleMove(0);
-                // handleMove(1);
+                // disable selection
+                $slider[0].addEventListener('selectstart', false);
+                // stop propagation
+                $slider[0].addEventListener('click', function (event) {
+                    event.stopPropagation();
+                });
 
             }
         };

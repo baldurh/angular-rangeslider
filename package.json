@@ -1,0 +1,13 @@
+{
+  "name": "angular-rangeslider",
+  "description": "...",
+  "version": "0.0.6",
+  "devDependencies": {
+    "gulp": "*",
+    "gulp-watch": "*",
+    "gulp-livereload": "*",
+    "gulp-util": "~2.2.14",
+    "gulp-open": "~0.2.8",
+    "gulp-connect": "~0.8.0"
+  }
+}
